@@ -1,0 +1,247 @@
+-- SERVICIOS
+local CoreGui = game:GetService("CoreGui")
+local TweenService = game:GetService("TweenService")
+local UserInputService = game:GetService("UserInputService")
+local ReplicatedStorage = game:GetService("ReplicatedStorage")
+local Players = game:GetService("Players")
+local Workspace = game:GetService("Workspace")
+local LocalPlayer = Players.LocalPlayer
+
+-- LIMPIEZA
+if CoreGui:FindFirstChild("NotFoundHub") then CoreGui.NotFoundHub:Destroy() end
+
+local ScreenGui = Instance.new("ScreenGui")
+ScreenGui.Name = "NotFoundHub"
+ScreenGui.Parent = CoreGui
+ScreenGui.ZIndexBehavior = Enum.ZIndexBehavior.Sibling
+ScreenGui.IgnoreGuiInset = true
+
+local XrayEnabled = false
+local LaserEnabled = false
+local CacheXray = {}
+
+---------------------------------------------------------
+-- EFECTOS VISUALES (RAINBOW & LLUVIA)
+---------------------------------------------------------
+local function ApplyRainbow(obj)
+    task.spawn(function()
+        while obj and obj.Parent do
+            local hue = tick() % 5 / 5
+            local color = Color3.fromHSV(hue, 0.8, 1)
+            if obj:IsA("UIStroke") then obj.Color = color
+            elseif obj:IsA("TextLabel") or obj:IsA("TextButton") then obj.TextColor3 = color end
+            task.wait()
+        end
+    end)
+end
+
+-- Efecto de lluvia dentro del menú
+local function CreateRainEffect(parent)
+    task.spawn(function()
+        while parent and parent.Parent do
+            local drop = Instance.new("Frame")
+            drop.Size = UDim2.new(0, 2, 0, math.random(8, 15))
+            drop.Position = UDim2.new(math.random(), 0, -0.1, 0)
+            drop.BackgroundColor3 = Color3.new(1, 1, 1)
+            drop.BackgroundTransparency = 0.6
+            drop.BorderSizePixel = 0
+            drop.ZIndex = parent.ZIndex + 1
+            drop.Parent = parent
+            
+            local fallTime = math.random(15, 25) / 10
+            local drift = math.random(-50, 50)
+            
+            local tween = TweenService:Create(drop, TweenInfo.new(fallTime, Enum.EasingStyle.Linear), {
+                Position = UDim2.new(drop.Position.X.Scale, drift, 1.1, 0),
+                BackgroundTransparency = 1
+            })
+            tween:Play()
+            tween.Completed:Connect(function() drop:Destroy() end)
+            task.wait(0.1)
+        end
+    end)
+end
+
+-- Puntos de la intro
+local function CreateStarPoint(parent)
+    local p = Instance.new("Frame")
+    p.Size = UDim2.new(0, math.random(4,7), 0, math.random(4,7))
+    p.Position = UDim2.new(math.random(), 0, math.random(), 0)
+    p.BorderSizePixel = 0; p.Parent = parent; p.ZIndex = 50005
+    Instance.new("UICorner", p).CornerRadius = UDim.new(1, 0)
+    ApplyRainbow(p)
+    task.spawn(function()
+        TweenService:Create(p, TweenInfo.new(1.2), {BackgroundTransparency = 1, Size = UDim2.new(0,0,0,0)}):Play()
+        task.wait(1.2); p:Destroy()
+    end)
+end
+
+---------------------------------------------------------
+-- SISTEMA DE VENTANAS (NOTFOUND HUB)
+---------------------------------------------------------
+local function CreateSmartFrame(name, size, pos, titleText)
+    local Frame = Instance.new("Frame", ScreenGui)
+    Frame.Name = name; Frame.Size = size; Frame.Position = pos
+    Frame.BackgroundColor3 = Color3.fromRGB(10, 10, 10); Frame.BorderSizePixel = 0
+    Frame.Visible = false; Frame.ClipsDescendants = true
+    Instance.new("UICorner", Frame).CornerRadius = UDim.new(0, 12)
+    
+    local Stroke = Instance.new("UIStroke", Frame); Stroke.Thickness = 2.5; ApplyRainbow(Stroke)
+
+    -- Iniciar efecto de lluvia de fondo
+    CreateRainEffect(Frame)
+
+    local Header = Instance.new("Frame", Frame)
+    Header.Size = UDim2.new(1, 0, 0, 45); Header.BackgroundTransparency = 1; Header.ZIndex = 10
+    
+    local Title = Instance.new("TextLabel", Header)
+    Title.Text = titleText; Title.Size = UDim2.new(1, -50, 1, 0); Title.Position = UDim2.new(0, 15, 0, 0)
+    Title.Font = Enum.Font.SpecialElite; Title.TextSize = 20; Title.BackgroundTransparency = 1
+    Title.TextColor3 = Color3.new(1,1,1); Title.TextXAlignment = 0
+    ApplyRainbow(Title)
+
+    local MiniBtn = Instance.new("TextButton", Header)
+    MiniBtn.Text = "−"; MiniBtn.Size = UDim2.new(0, 32, 0, 32); MiniBtn.Position = UDim2.new(1, -38, 0, 6)
+    MiniBtn.BackgroundColor3 = Color3.fromRGB(25, 25, 25); MiniBtn.TextColor3 = Color3.new(1, 1, 1)
+    Instance.new("UICorner", MiniBtn); MiniBtn.ZIndex = 11
+
+    local minimized = false
+    MiniBtn.Activated:Connect(function()
+        minimized = not minimized
+        local targetSize = minimized and UDim2.new(0, size.X.Offset, 0, 45) or size
+        TweenService:Create(Frame, TweenInfo.new(0.5, Enum.EasingStyle.Back), {Size = targetSize}):Play()
+        MiniBtn.Text = minimized and "+" or "−"
+    end)
+
+    local dragging, dragStart, startPos
+    Header.InputBegan:Connect(function(input) if input.UserInputType == Enum.UserInputType.MouseButton1 then dragging = true; dragStart = input.Position; startPos = Frame.Position end end)
+    UserInputService.InputChanged:Connect(function(input)
+        if dragging and input.UserInputType == Enum.UserInputType.MouseMovement then
+            local delta = input.Position - dragStart
+            Frame.Position = UDim2.new(startPos.X.Scale, startPos.X.Offset + delta.X, startPos.Y.Scale, startPos.Y.Offset + delta.Y)
+        end
+    end)
+    UserInputService.InputEnded:Connect(function(input) if input.UserInputType == Enum.UserInputType.MouseButton1 then dragging = false end end)
+    return Frame
+end
+
+local MainFrame = CreateSmartFrame("Main", UDim2.new(0, 260, 0, 340), UDim2.new(0.5, -270, 0.5, -170), "NOTFOUND HUB")
+local AdminFrame = CreateSmartFrame("Admin", UDim2.new(0, 220, 0, 340), UDim2.new(0.5, 10, 0.5, -170), "ADMIN PANEL")
+
+local function AddBtn(txt, parent)
+    local b = Instance.new("TextButton", parent)
+    b.Size = UDim2.new(0.92, 0, 0, 42); b.Text = txt; b.BackgroundColor3 = Color3.fromRGB(20, 20, 20); b.BackgroundTransparency = 0.3
+    b.Font = Enum.Font.GothamBold; b.TextSize = 13; b.TextColor3 = Color3.new(1, 1, 1); b.ZIndex = 20
+    Instance.new("UICorner", b).CornerRadius = UDim.new(0, 8)
+    Instance.new("UIStroke", b).Color = Color3.fromRGB(50, 50, 50)
+    return b
+end
+
+local MainScroll = Instance.new("ScrollingFrame", MainFrame); MainScroll.Size = UDim2.new(1,-10,1,-60); MainScroll.Position = UDim2.new(0,5,0,55); MainScroll.BackgroundTransparency = 1; MainScroll.ScrollBarThickness = 0; MainScroll.ZIndex = 15
+Instance.new("UIListLayout", MainScroll).Padding = UDim.new(0, 12); Instance.new("UIPadding", MainScroll).PaddingLeft = UDim.new(0, 10)
+
+local AdminScroll = Instance.new("ScrollingFrame", AdminFrame); AdminScroll.Size = UDim2.new(1,-10,1,-60); AdminScroll.Position = UDim2.new(0,5,0,55); AdminScroll.BackgroundTransparency = 1; AdminScroll.ScrollBarThickness = 0; AdminScroll.ZIndex = 15
+Instance.new("UIListLayout", AdminScroll).Padding = UDim.new(0, 8); Instance.new("UIPadding", AdminScroll).PaddingLeft = UDim.new(0, 8)
+
+---------------------------------------------------------
+-- LÓGICA DE FUNCIONES
+---------------------------------------------------------
+local function toggleXray()
+    for _, obj in ipairs(Workspace:GetDescendants()) do
+        if obj:IsA("BasePart") and not obj.Parent:FindFirstChild("Humanoid") then
+            local esPisoGrande = obj.Size.X > 150 or obj.Size.Z > 150
+            local nombresProhibidos = {"Baseplate", "Floor", "Road", "Grass", "Ground", "Map"}
+            local esNombreProhibido = false
+            for _, n in ipairs(nombresProhibidos) do if obj.Name:lower():find(n:lower()) then esNombreProhibido = true break end end
+            if not esPisoGrande and not esNombreProhibido and obj.Transparency < 1 then
+                if XrayEnabled then if not CacheXray[obj] then CacheXray[obj] = obj.Transparency end obj.Transparency = 0.7 
+                else if CacheXray[obj] then obj.Transparency = CacheXray[obj] end end
+            end
+        end
+    end
+end
+
+local function aplicarESP(player)
+    if player == LocalPlayer then return end
+    local function setup(char)
+        if not char then return end
+        local h = char:FindFirstChild("ESP_H") or Instance.new("Highlight", char)
+        h.Name = "ESP_H"; h.FillTransparency = 0.5; h.OutlineTransparency = 0; h.DepthMode = 0
+        local head = char:WaitForChild("Head", 5)
+        local b = head:FindFirstChild("ESP_B") or Instance.new("BillboardGui", head)
+        b.Name = "ESP_B"; b.AlwaysOnTop = true; b.Size = UDim2.new(0, 100, 0, 50); b.StudsOffset = Vector3.new(0, 3, 0)
+        local l = b:FindFirstChild("L") or Instance.new("TextLabel", b)
+        l.Name = "L"; l.Size = UDim2.new(1, 0, 1, 0); l.BackgroundTransparency = 1; l.Text = player.Name; l.Font = 2; l.TextSize = 16
+        task.spawn(function()
+            while char and char.Parent do
+                local c = Color3.fromHSV(tick() % 4 / 4, 1, 1)
+                h.FillColor = c; h.OutlineColor = c; l.TextColor3 = c; task.wait()
+            end
+        end)
+    end
+    player.CharacterAdded:Connect(setup); if player.Character then setup(player.Character) end
+end
+
+local espBtn = AddBtn("ESP", MainScroll)
+espBtn.Activated:Connect(function() for _, p in pairs(Players:GetPlayers()) do aplicarESP(p) end; espBtn.Text = "ESP: ON" end)
+
+local xrayBtn = AddBtn("X-RAY BASES", MainScroll)
+xrayBtn.Activated:Connect(function() XrayEnabled = not XrayEnabled; xrayBtn.Text = XrayEnabled and "X-RAY: ON" or "X-RAY: OFF"; toggleXray() end)
+
+local function DesyncV3()
+    local flags = {{"GameNetPVHeaderRotationalVelocityZeroCutoffExponent", "-5000"},{"LargeReplicatorWrite5", "true"},{"LargeReplicatorEnabled9", "true"},{"AngularVelociryLimit", "360"},{"TimestepArbiterVelocityCriteriaThresholdTwoDt", "2147483646"},{"S2PhysicsSenderRate", "15000"},{"DisableDPIScale", "true"},{"MaxDataPacketPerSend", "2147483647"},{"ServerMaxBandwith", "52"},{"PhysicsSenderMaxBandwidthBps", "20000"},{"MaxTimestepMultiplierBuoyancy", "2147483647"},{"SimOwnedNOUCountThresholdMillionth", "2147483647"},{"MaxMissedWorldStepsRemembered", "-2147483648"},{"CheckPVDifferencesForInterpolationMinVelThresholdStudsPerSecHundredth", "1"},{"StreamJobNOUVolumeLengthCap", "2147483647"},{"DebugSendDistInSteps", "-2147483648"},{"MaxTimestepMultiplierAcceleration", "2147483647"},{"LargeReplicatorRead5", "true"},{"SimExplicitlyCappedTimestepMultiplier", "2147483646"},{"GameNetDontSendRedundantNumTimes", "1"},{"CheckPVLinearVelocityIntegrateVsDeltaPositionThresholdPercent", "1"},{"CheckPVCachedRotVelThresholdPercent", "10"},{"LargeReplicatorSerializeRead3", "true"},{"ReplicationFocusNouExtentsSizeCutoffForPauseStuds", "2147483647"},{"NextGenReplicatorEnabledWrite4", "true"},{"CheckPVDifferencesForInterpolationMinRotVelThresholdRadsPerSecHundredth", "1"},{"GameNetDontSendRedundantDeltaPositionMillionth", "1"},{"InterpolationFrameVelocityThresholdMillionth", "5"},{"StreamJobNOUVolumeCap", "2147483647"},{"InterpolationFrameRotVelocityThresholdMillionth", "5"},{"WorldStepMax", "30"},{"TimestepArbiterHumanoidLinearVelThreshold", "1"},{"InterpolationFramePositionThresholdMillionth", "5"},{"TimestepArbiterHumanoidTurningVelThreshold", "1"},{"MaxTimestepMultiplierContstraint", "2147483647"},{"GameNetPVHeaderLinearVelocityZeroCutoffExponent", "-5000"},{"CheckPVCachedVelThresholdPercent", "10"},{"TimestepArbiterOmegaThou", "1073741823"},{"MaxAcceptableUpdateDelay", "1"},{"LargeReplicatorSerializeWrite4", "true"}}
+    for _, d in ipairs(flags) do pcall(function() setfflag(d[1], d[2]) end) end
+    local char = LocalPlayer.Character
+    if char then local h = char:FindFirstChildOfClass("Humanoid") if h then h:ChangeState(15) end; char:ClearAllChildren(); local f = Instance.new("Model", workspace); LocalPlayer.Character = f; task.wait(); LocalPlayer.Character = char; f:Destroy() end
+end
+
+AddBtn("ANTI HIT (TE VA HACER RESET XD)", MainScroll).Activated:Connect(DesyncV3)
+
+local laserBtn = AddBtn("LASER CAPA: OFF", MainScroll)
+laserBtn.Activated:Connect(function() LaserEnabled = not LaserEnabled; laserBtn.Text = "LASER CAPA: "..(LaserEnabled and "ON" or "OFF") end)
+
+task.spawn(function()
+    while task.wait(0.2) do
+        if LaserEnabled then
+            pcall(function()
+                local r = ReplicatedStorage.Packages.Net["RE/UseItem"]; local t = nil; local d = 100
+                for _, p in pairs(Players:GetPlayers()) do if p ~= LocalPlayer and p.Character and p.Character:FindFirstChild("UpperTorso") then
+                local dist = (LocalPlayer.Character.HumanoidRootPart.Position - p.Character.UpperTorso.Position).Magnitude
+                if dist < d then d = dist; t = p end end end
+                if t then r:FireServer(Vector3.new(0,0,0), t.Character.UpperTorso) end
+            end)
+        end
+    end
+end)
+
+local function UpdateAdmin()
+    for _, v in pairs(AdminScroll:GetChildren()) do if v:IsA("TextButton") then v:Destroy() end end
+    for _, p in pairs(Players:GetPlayers()) do if p ~= LocalPlayer then
+        local b = AddBtn(p.DisplayName, AdminScroll)
+        b.Activated:Connect(function() pcall(function() local r = ReplicatedStorage.Packages.Net["RE/AdminPanelService/ExecuteCommand"]
+        for _, c in ipairs({"rocket", "balloon", "inverse", "tiny"}) do r:FireServer(p, c) end end) end)
+    end end
+end
+UpdateAdmin(); Players.PlayerAdded:Connect(UpdateAdmin)
+
+---------------------------------------------------------
+-- INTRO PRO SINCRONIZADA
+---------------------------------------------------------
+local IntroCanvas = Instance.new("Frame", ScreenGui); IntroCanvas.Size = UDim2.new(1, 0, 1, 0); IntroCanvas.BackgroundColor3 = Color3.new(0, 0, 0); IntroCanvas.ZIndex = 50000
+local Ring = Instance.new("Frame", IntroCanvas); Ring.AnchorPoint = Vector2.new(0.5, 0.5); Ring.Position = UDim2.new(0.5, 0, 0.5, 0); Ring.Size = UDim2.new(0, 0, 0, 0); Ring.BackgroundTransparency = 1; Ring.ZIndex = 50001
+local RingStroke = Instance.new("UIStroke", Ring); RingStroke.Thickness = 5; ApplyRainbow(RingStroke); Instance.new("UICorner", Ring).CornerRadius = UDim.new(1, 0)
+local CenterText = Instance.new("TextLabel", IntroCanvas); CenterText.Text = "NOTFOUND HUB"; CenterText.Font = Enum.Font.SpecialElite; CenterText.TextSize = 1; CenterText.Size = UDim2.new(1, 0, 1, 0); CenterText.BackgroundTransparency = 1; CenterText.ZIndex = 50002; CenterText.TextTransparency = 1; ApplyRainbow(CenterText)
+
+task.spawn(function()
+    local dotsOn = true
+    task.spawn(function() while dotsOn do CreateStarPoint(IntroCanvas); task.wait(0.06) end end)
+    local animTime = 1.8
+    TweenService:Create(Ring, TweenInfo.new(animTime, Enum.EasingStyle.Quart), {Size = UDim2.new(0, 500, 0, 500)}):Play()
+    TweenService:Create(CenterText, TweenInfo.new(animTime, Enum.EasingStyle.Back), {TextSize = 75, TextTransparency = 0}):Play()
+    task.wait(animTime + 0.5)
+    dotsOn = false
+    TweenService:Create(CenterText, TweenInfo.new(0.8), {TextTransparency = 1}):Play()
+    TweenService:Create(Ring, TweenInfo.new(0.8), {Size = UDim2.new(0, 1200, 0, 1200), BackgroundTransparency = 1}):Play()
+    TweenService:Create(IntroCanvas, TweenInfo.new(1), {BackgroundTransparency = 1}):Play()
+    task.wait(1); MainFrame.Visible = true; AdminFrame.Visible = true; IntroCanvas:Destroy()
+end)
